@@ -1,0 +1,7 @@
+<resources>
+    <string name="app_name">JARVIS Kiosk</string>
+    <string name="url_hint">https://exemplo.com</string>
+    <string name="btn_start">Iniciar</string>
+    <string name="btn_config">Configurar URL</string>
+    <string name="config_title">Configurar URL</string>
+</resources>
