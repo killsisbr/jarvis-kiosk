@@ -25,7 +25,7 @@ class MainActivity : AppCompatActivity() {
     companion object {
         private const val PREFS_NAME = "kiosk_prefs"
         private const val KEY_URL = "base_url"
-        private const val REST_PORT = 8080
+        private const val REST_PORT = 8081
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {

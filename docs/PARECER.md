@@ -32,7 +32,7 @@ Desenvolver um navegador Android em modo kiosk **(tela cheia, sem barras de nave
 - Exibe tela de configuração de URL no primeiro uso
 - Entra em modo kiosk fullscreen com `SYSTEM_UI_FLAG_IMMERSIVE_STICKY`
 - Mantém tela acesa via `FLAG_KEEP_SCREEN_ON`
-- Inicia servidor REST na porta 8080
+- Inicia servidor REST na porta 8081
 
 **KioskWebView.kt** — Configuração do WebView:
 - JavaScript, DOM storage, mixed content habilitados
@@ -112,7 +112,7 @@ Desenvolver um navegador Android em modo kiosk **(tela cheia, sem barras de nave
 ## 6. Observações técnicas
 
 - O APK é compilado em modo **debug** (sem `signingConfigs`), permitindo instalação direta sem keystore. Para distribuição na Play Store seria necessário configurar assinatura de release.
-- A porta 8080 é fixa e pode ser alterada na constante `REST_PORT` em `MainActivity.kt`.
+- A porta 8081 é fixa e pode ser alterada na constante `REST_PORT` em `MainActivity.kt`.
 - Não há bloqueio de saída do app (sem PIN) — o botão "voltar" sai do app quando não há histórico de navegação, conforme requisito.
 - O `gradlew` não está versionado — é gerado automaticamente pelo CI. Para builds locais, executar `gradle wrapper`.
 
