@@ -28,7 +28,7 @@ object KioskWebView {
             displayZoomControls = false
             cacheMode = android.webkit.WebSettings.LOAD_DEFAULT
             setSupportMultipleWindows(false)
-            userAgentString = settings.userAgentString.replace("; wv", "")
+            userAgentString = userAgentString.replace("; wv", "")
         }
 
         if (WebViewFeature.isFeatureSupported(WebViewFeature.FORCE_DARK)) {
