@@ -9,7 +9,7 @@ import android.webkit.JavascriptInterface
  *
  * Quando a pagina web chama window.print(), o JS injetado redireciona
  * para window.AndroidPrint.printPage(html) que chega aqui e dispara
- * a impressao silenciosa via SunmiPrintHelper.
+ * a impressao silenciosa via PrintRouter (Sunmi ou USB Epson).
  *
  * Estilo RawBT -- sem popup, sem dialogo, impressao direta.
  */
@@ -55,11 +55,11 @@ class PrintBridge(private val context: Context) {
     @JavascriptInterface
     fun printPage(html: String) {
         Log.i(TAG, "printPage() chamado. HTML size: ${html.length} chars")
-        if (!SunmiPrintHelper.isReady()) {
-            Log.w(TAG, "Impressora nao pronta. Status: ${SunmiPrintHelper.getStatusDetail()}")
+        if (!PrintRouter.isReady()) {
+            Log.w(TAG, "Nenhuma impressora pronta. Status: ${PrintRouter.getStatusDetail()}")
             return
         }
-        SunmiPrintHelper.printHtml(context, html, 576)
+        PrintRouter.printHtml(context, html, 576)
     }
 
     /**
@@ -71,31 +71,41 @@ class PrintBridge(private val context: Context) {
     @JavascriptInterface
     fun printHtml(html: String, width: Int) {
         Log.i(TAG, "printHtml() chamado. HTML size: ${html.length}, width: ${width}")
-        if (!SunmiPrintHelper.isReady()) {
-            Log.w(TAG, "Impressora nao pronta. Status: ${SunmiPrintHelper.getStatusDetail()}")
+        if (!PrintRouter.isReady()) {
+            Log.w(TAG, "Nenhuma impressora pronta. Status: ${PrintRouter.getStatusDetail()}")
             return
         }
-        SunmiPrintHelper.printHtml(context, html, if (width > 0) width else 576)
+        PrintRouter.printHtml(context, html, if (width > 0) width else 576)
     }
 
     /**
-     * Verifica se a impressora esta conectada.
+     * Verifica se alguma impressora esta conectada (Sunmi ou USB).
      * JS: window.AndroidPrint.isReady()
      */
     @JavascriptInterface
-    fun isReady(): Boolean = SunmiPrintHelper.isReady()
+    fun isReady(): Boolean = PrintRouter.isReady()
 
     /**
-     * Status detalhado da impressora.
+     * Status detalhado das impressoras (Sunmi + USB).
      * JS: window.AndroidPrint.getStatus()
      */
     @JavascriptInterface
-    fun getStatus(): String = SunmiPrintHelper.getStatusDetail()
+    fun getStatus(): String = PrintRouter.getStatusDetail()
 
     /**
-     * Imprime cupom de teste.
+     * Imprime cupom de teste na impressora disponivel.
      * JS: window.AndroidPrint.printTest()
      */
     @JavascriptInterface
-    fun printTest(): Boolean = SunmiPrintHelper.printTest()
+    fun printTest(): Boolean = PrintRouter.printTest()
+
+    /**
+     * Forca rescan de impressoras USB (hot-plug).
+     * JS: window.AndroidPrint.rescanUsb()
+     */
+    @JavascriptInterface
+    fun rescanUsb() {
+        Log.i(TAG, "rescanUsb() chamado via JS")
+        PrintRouter.rescanUsb()
+    }
 }

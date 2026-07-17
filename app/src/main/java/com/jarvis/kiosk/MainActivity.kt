@@ -35,8 +35,8 @@ class MainActivity : AppCompatActivity() {
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         hideSystemUI()
 
-        // Inicializa conexao com impressora Sunmi (D2 Mini / T2 / V2)
-        SunmiPrintHelper.init(this)
+        // Inicializa impressoras: Sunmi interna + USB externa (Epson)
+        PrintRouter.init(this)
 
         // Bridge JS para interceptar window.print()
         printBridge = PrintBridge(this)
@@ -65,7 +65,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         restServer?.stop()
-        SunmiPrintHelper.destroy(this)
+        PrintRouter.destroy(this)
         super.onDestroy()
     }
 

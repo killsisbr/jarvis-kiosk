@@ -5,6 +5,9 @@
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
 
+    <!-- USB Host para impressoras externas (Epson, genericas ESC/POS) -->
+    <uses-feature android:name="android.hardware.usb.host" android:required="false" />
+
     <application
         android:allowBackup="false"
         android:icon="@mipmap/ic_launcher"

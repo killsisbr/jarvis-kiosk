@@ -20,3 +20,7 @@
 # Keep Sunmi Printer SDK
 -keep class com.sunmi.peripheral.printer.** { *; }
 -keep class woyou.aidlservice.jiuiv5.** { *; }
+
+# Keep USB Printer Manager (ESC/POS)
+-keep class com.jarvis.kiosk.UsbPrinterManager { *; }
+-keep class com.jarvis.kiosk.PrintRouter { *; }
