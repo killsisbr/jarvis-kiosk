@@ -14,7 +14,13 @@ import androidx.webkit.WebViewFeature
 @SuppressLint("SetJavaScriptEnabled")
 object KioskWebView {
 
-    fun setup(webView: WebView) {
+    /**
+     * Configura o WebView para modo kiosk com auto-print integrado.
+     *
+     * @param webView WebView principal do kiosk
+     * @param printBridge Interface JS para impressao silenciosa (pode ser null se impressao desabilitada)
+     */
+    fun setup(webView: WebView, printBridge: PrintBridge? = null) {
         val settings = webView.settings.apply {
             javaScriptEnabled = true
             domStorageEnabled = true
@@ -41,22 +47,21 @@ object KioskWebView {
         webView.setLayerType(View.LAYER_TYPE_HARDWARE, null)
         webView.overScrollMode = WebView.OVER_SCROLL_NEVER
 
+        // Registra a interface JS para impressao silenciosa (estilo RawBT)
+        if (printBridge != null) {
+            webView.addJavascriptInterface(printBridge, PrintBridge.JS_INTERFACE_NAME)
+        }
+
         webView.webViewClient = object : WebViewClient() {
             override fun shouldOverrideUrlLoading(view: WebView, url: String): Boolean {
                 view.loadUrl(url)
                 return true
             }
             override fun onPageFinished(view: WebView, url: String) {
-                view.evaluateJavascript(
-                    """
-                    (function() {
-                        window.print = function(){};
-                        window.onafterprint = null;
-                        window.onbeforeprint = null;
-                        if (window.Android) window.Android.onPrint = function(){};
-                    })();
-                    """.trimIndent(), null
-                )
+                // Injeta interceptor de window.print() em cada pagina carregada
+                if (printBridge != null) {
+                    view.evaluateJavascript(PrintBridge.INJECT_SCRIPT, null)
+                }
             }
         }
 

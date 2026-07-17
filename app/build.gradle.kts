@@ -40,4 +40,10 @@ dependencies {
     implementation("androidx.core:core-ktx:1.12.0")
     implementation("androidx.appcompat:appcompat:1.6.1")
     implementation("androidx.webkit:webkit:1.10.0")
+
+    // SDK Impressora Sunmi (nativa D2 Mini / T2 / V2)
+    implementation("com.sunmi:printerlibrary:1.0.24")
+
+    // JSON parsing para payloads de impressao via REST
+    implementation("com.google.code.gson:gson:2.10.1")
 }

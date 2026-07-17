@@ -21,6 +21,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var container: FrameLayout
     private var restServer: RestApiServer? = null
     private var baseUrl: String = ""
+    private lateinit var printBridge: PrintBridge
 
     companion object {
         private const val PREFS_NAME = "kiosk_prefs"
@@ -33,6 +34,12 @@ class MainActivity : AppCompatActivity() {
 
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         hideSystemUI()
+
+        // Inicializa conexao com impressora Sunmi (D2 Mini / T2 / V2)
+        SunmiPrintHelper.init(this)
+
+        // Bridge JS para interceptar window.print()
+        printBridge = PrintBridge(this)
 
         baseUrl = getSavedUrl()
 
@@ -58,6 +65,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         restServer?.stop()
+        SunmiPrintHelper.destroy(this)
         super.onDestroy()
     }
 
@@ -105,7 +113,8 @@ class MainActivity : AppCompatActivity() {
         ))
         setContentView(container)
 
-        KioskWebView.setup(webView)
+        // Setup com PrintBridge integrado -- intercepta window.print() silenciosamente
+        KioskWebView.setup(webView, printBridge)
         webView.loadUrl(url)
 
         startRestServer()
