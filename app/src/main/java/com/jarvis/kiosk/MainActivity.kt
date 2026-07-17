@@ -158,7 +158,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun getSavedUrl(): String {
         return getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            .getString(KEY_URL, "") ?: ""
+            .getString(KEY_URL, "https://killsis.com/admin") ?: "https://killsis.com/admin"
     }
 
     private fun saveUrl(url: String) {
