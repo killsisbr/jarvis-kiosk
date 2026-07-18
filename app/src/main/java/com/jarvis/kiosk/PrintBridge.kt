@@ -50,14 +50,79 @@ class PrintBridge(private val context: Context) {
                         });
                         win.onbeforeprint = null;
                         win.onafterprint = null;
-                        console.log(tag, 'Override aplicado em:', win.location.href);
+                        console.log(tag, 'Override de print aplicado em:', win.location.href);
                     } catch(e) {
-                        console.error(tag, 'Falha ao aplicar override:', e);
+                        console.error(tag, 'Falha ao aplicar override de print:', e);
                     }
                 }
 
                 // Aplica na janela principal
                 applyOverride(window);
+
+                // Mock de window.open para capturar fluxo de criacao de cupons via popups dinâmicos
+                try {
+                    window.open = function(url, target, features) {
+                        console.log(tag, 'window.open interceptado para URL:', url);
+                        
+                        // Se for navegacao para site externo ou URL real, navega na mesma aba
+                        if (url && url !== 'about:blank' && !url.startsWith('javascript:')) {
+                            window.location.href = url;
+                            return window;
+                        }
+
+                        // Objeto de emulacao da janela do cupom
+                        var mockWindow = {
+                            closed: false,
+                            document: {
+                                _html: '',
+                                open: function() {
+                                    this._html = '';
+                                    return this;
+                                },
+                                write: function(content) {
+                                    this._html += content;
+                                },
+                                writeln: function(content) {
+                                    this._html += content + '\n';
+                                },
+                                close: function() {
+                                    console.log(tag, 'document.close() chamado no mock');
+                                },
+                                get body() {
+                                    var docSelf = this;
+                                    return {
+                                        write: function(c) { docSelf.write(c); }
+                                    };
+                                }
+                            },
+                            print: function() {
+                                if (window.AndroidPrint) {
+                                    try {
+                                        var finalHtml = this.document._html;
+                                        if (!finalHtml) {
+                                            finalHtml = document.documentElement.outerHTML;
+                                        }
+                                        window.AndroidPrint.printPage(finalHtml);
+                                    } catch(e) {
+                                        console.error(tag, 'Erro ao imprimir do mockWindow:', e);
+                                    }
+                                }
+                            },
+                            close: function() {
+                                this.closed = true;
+                                this.document._html = '';
+                                console.log(tag, 'mockWindow.close() chamado');
+                            },
+                            focus: function() {},
+                            blur: function() {}
+                        };
+
+                        return mockWindow;
+                    };
+                    console.log(tag, 'Mock de window.open registrado');
+                } catch(e) {
+                    console.error(tag, 'Erro ao interceptar window.open:', e);
+                }
 
                 // Intercepta criacao de novos iframes
                 try {
