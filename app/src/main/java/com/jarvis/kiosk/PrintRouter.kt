@@ -161,8 +161,8 @@ object PrintRouter {
                 offscreenWebView.settings.apply {
                     javaScriptEnabled = true
                     allowFileAccess = true
-                    useWideViewPort = false
-                    loadWithOverviewMode = false
+                    useWideViewPort = true
+                    loadWithOverviewMode = true
                 }
                 offscreenWebView.setInitialScale(100)
 
@@ -227,29 +227,49 @@ object PrintRouter {
                 }
 
                 // Cupons do PDV ja chegam como documento completo (<!DOCTYPE html>...);
-                // re-envelopar aninharia <html> dentro de <body>. So envelopa fragmentos.
+                // re-envelopar aninharia <html> dentro de <body>. Injetamos a viewport
+                // e estilos de reset no Head de documentos completos para forcar a bobina termica.
                 val trimmed = html.trimStart()
                 val isFullDocument = trimmed.startsWith("<!DOCTYPE", ignoreCase = true) ||
                     trimmed.startsWith("<html", ignoreCase = true)
 
-                val wrappedHtml = if (isFullDocument) html else """
+                val injection = """
+                    <meta name="viewport" content="width=$targetWidth, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+                    <style>
+                        html, body {
+                            width: ${targetWidth}px !important;
+                            max-width: ${targetWidth}px !important;
+                            overflow-x: hidden !important;
+                            margin: 0 !important;
+                            padding: 0 !important;
+                        }
+                        * {
+                            box-sizing: border-box !important;
+                            max-width: 100% !important;
+                        }
+                    </style>
+                """.trimIndent()
+
+                val wrappedHtml = if (isFullDocument) {
+                    if (html.contains("</head>", ignoreCase = true)) {
+                        html.replace("</head>", "$injection</head>", ignoreCase = true)
+                    } else if (html.contains("<body>", ignoreCase = true)) {
+                        html.replace("<body>", "<head>$injection</head><body>", ignoreCase = true)
+                    } else {
+                        injection + html
+                    }
+                } else {
+                    """
                     <!DOCTYPE html>
                     <html>
                     <head>
                     <meta charset="utf-8">
-                    <meta name="viewport" content="width=${targetWidth}">
-                    <style>
-                        * { margin: 0; padding: 0; box-sizing: border-box; }
-                        html, body {
-                            width: ${targetWidth}px !important;
-                            max-width: ${targetWidth}px !important;
-                            overflow-x: hidden;
-                        }
-                    </style>
+                    $injection
                     </head>
                     <body>$html</body>
                     </html>
-                """.trimIndent()
+                    """.trimIndent()
+                }
 
                 offscreenWebView.loadDataWithBaseURL(null, wrappedHtml, "text/html", "utf-8", null)
             } catch (e: Exception) {
