@@ -142,6 +142,7 @@ object PrintRouter {
         Handler(Looper.getMainLooper()).post {
             try {
                 val offscreenWebView = WebView(context)
+                offscreenWebView.setLayerType(View.LAYER_TYPE_SOFTWARE, null)
                 val targetWidth = if (paperWidth > 0) paperWidth else 576
 
                 offscreenWebView.settings.apply {

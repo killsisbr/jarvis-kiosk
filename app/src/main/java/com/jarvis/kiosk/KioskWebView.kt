@@ -63,6 +63,13 @@ object KioskWebView {
                     view.evaluateJavascript(PrintBridge.INJECT_SCRIPT, null)
                 }
             }
+            override fun onRenderProcessGone(view: WebView, detail: android.webkit.RenderProcessGoneDetail): Boolean {
+                android.util.Log.w("KioskWebView", "Processo de renderizacao Chromium caiu (didCrash=${detail.didCrash()}). Recarregando...")
+                view.post {
+                    view.reload()
+                }
+                return true // Impede crash da aplicacao
+            }
         }
 
         webView.webChromeClient = object : WebChromeClient() {

@@ -101,8 +101,10 @@ object SunmiPrintHelper {
     fun printHtml(context: Context, html: String, paperWidth: Int = 576) {
         Handler(Looper.getMainLooper()).post {
             try {
-                // Cria o WebView usando o context da Activity (necessario para renderizar via GPU no Sunmi OS)
+                // Cria o WebView usando o context da Activity e desativa aceleracao de hardware
+                // para evitar conflitos na GPU compartilhada que deixam a tela principal branca.
                 val offscreenWebView = WebView(context)
+                offscreenWebView.setLayerType(View.LAYER_TYPE_SOFTWARE, null)
                 val targetWidth = if (paperWidth > 0) paperWidth else 576
 
                 offscreenWebView.settings.apply {
