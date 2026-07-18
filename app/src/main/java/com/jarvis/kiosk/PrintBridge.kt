@@ -23,27 +23,61 @@ class PrintBridge(private val context: Context) {
 
         /**
          * Script JS injetado em cada pagina carregada.
-         * Intercepta window.print() e envia o HTML para o Android.
+         * Intercepta window.print() na pagina principal e em qualquer iframe criado.
          */
         val INJECT_SCRIPT = """
             (function() {
-                // Override do window.print() -- chamadas silenciosas
-                window.print = function() {
-                    if (window.AndroidPrint) {
-                        try {
-                            var html = document.documentElement.outerHTML;
-                            window.AndroidPrint.printPage(html);
-                        } catch(e) {
-                            console.error('[KioskPrint] Erro ao capturar HTML:', e);
-                        }
+                var tag = '[KioskPrint]';
+                
+                function applyOverride(win) {
+                    if (!win) return;
+                    try {
+                        Object.defineProperty(win, 'print', {
+                            value: function() {
+                                if (window.AndroidPrint) {
+                                    try {
+                                        var html = win.document.documentElement.outerHTML;
+                                        window.AndroidPrint.printPage(html);
+                                    } catch(e) {
+                                        console.error(tag, 'Erro ao capturar HTML:', e);
+                                    }
+                                } else {
+                                    console.warn(tag, 'AndroidPrint nao encontrado');
+                                }
+                            },
+                            writable: true,
+                            configurable: true
+                        });
+                        win.onbeforeprint = null;
+                        win.onafterprint = null;
+                        console.log(tag, 'Override aplicado em:', win.location.href);
+                    } catch(e) {
+                        console.error(tag, 'Falha ao aplicar override:', e);
                     }
-                };
-                
-                // Nulifica handlers de print events para evitar popups
-                window.onbeforeprint = null;
-                window.onafterprint = null;
-                
-                console.log('[KioskPrint] Auto-print interceptor ativo');
+                }
+
+                // Aplica na janela principal
+                applyOverride(window);
+
+                // Intercepta criacao de novos iframes
+                try {
+                    var orgCreate = document.createElement;
+                    document.createElement = function(tagName) {
+                        var el = orgCreate.apply(this, arguments);
+                        if (el && tagName && tagName.toLowerCase() === 'iframe') {
+                            el.addEventListener('load', function() {
+                                try {
+                                    if (el.contentWindow) {
+                                        applyOverride(el.contentWindow);
+                                    }
+                                } catch(err) {}
+                            });
+                        }
+                        return el;
+                    };
+                } catch(e) {
+                    console.error(tag, 'Erro ao interceptar createElement:', e);
+                }
             })();
         """.trimIndent()
     }
