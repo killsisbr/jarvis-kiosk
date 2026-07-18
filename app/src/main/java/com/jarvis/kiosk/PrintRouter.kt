@@ -1,5 +1,6 @@
 package com.jarvis.kiosk
 
+import android.app.Activity
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Canvas
@@ -7,6 +8,7 @@ import android.os.Handler
 import android.os.Looper
 import android.util.Log
 import android.view.View
+import android.view.ViewGroup
 import android.webkit.WebView
 import android.webkit.WebViewClient
 
@@ -140,6 +142,17 @@ object PrintRouter {
         onBitmapReady: (Bitmap) -> Unit
     ) {
         Handler(Looper.getMainLooper()).post {
+            // Precisa da Activity para anexar a WebView offscreen a decorView --
+            // sem isso, onAttachedToWindow() nunca dispara e o measure/layout/draw
+            // roda em estado indefinido no WebKit antigo do Android 7.1.2 (API 25),
+            // podendo derrubar o processo de renderizacao compartilhado com a WebView principal.
+            val activity = context as? Activity
+            val decorView = activity?.window?.decorView as? ViewGroup
+            if (decorView == null) {
+                Log.e(TAG, "renderHtmlToBitmap: context nao e uma Activity, nao foi possivel anexar WebView offscreen")
+                return@post
+            }
+
             try {
                 val offscreenWebView = WebView(context)
                 offscreenWebView.setLayerType(View.LAYER_TYPE_SOFTWARE, null)
@@ -153,27 +166,25 @@ object PrintRouter {
                 }
                 offscreenWebView.setInitialScale(100)
 
-                val wrappedHtml = """
-                    <!DOCTYPE html>
-                    <html>
-                    <head>
-                    <meta charset="utf-8">
-                    <meta name="viewport" content="width=${targetWidth}">
-                    <style>
-                        * { margin: 0; padding: 0; box-sizing: border-box; }
-                        html, body { 
-                            width: ${targetWidth}px !important; 
-                            max-width: ${targetWidth}px !important;
-                            overflow-x: hidden;
-                        }
-                    </style>
-                    </head>
-                    <body>$html</body>
-                    </html>
-                """.trimIndent()
+                fun cleanup() {
+                    try {
+                        decorView.removeView(offscreenWebView)
+                    } catch (ex: Exception) {
+                        Log.e(TAG, "Erro ao remover WebView offscreen da decorView: ${ex.message}")
+                    }
+                    try {
+                        offscreenWebView.destroy()
+                    } catch (ex: Exception) {
+                        Log.e(TAG, "Erro ao destruir WebView offscreen: ${ex.message}")
+                    }
+                }
 
-                offscreenWebView.loadDataWithBaseURL(null, wrappedHtml, "text/html", "utf-8", null)
+                decorView.addView(offscreenWebView, ViewGroup.LayoutParams(1, 1))
+                offscreenWebView.visibility = View.INVISIBLE
 
+                // Registra o client ANTES de chamar loadDataWithBaseURL: caso contrario
+                // o carregamento pode terminar antes do listener existir e onPageFinished
+                // nunca dispara -- e a impressao nunca acontece.
                 offscreenWebView.webViewClient = object : WebViewClient() {
                     override fun onPageFinished(view: WebView, url: String) {
                         super.onPageFinished(view, url)
@@ -199,15 +210,42 @@ object PrintRouter {
                             } catch (e: Exception) {
                                 Log.e(TAG, "Erro ao renderizar HTML para bitmap: ${e.message}", e)
                             } finally {
-                                try {
-                                    view.destroy()
-                                } catch (ex: Exception) {
-                                    Log.e(TAG, "Erro ao destruir WebView offscreen: ${ex.message}")
-                                }
+                                cleanup()
                             }
                         }, 500)
                     }
+
+                    override fun onReceivedError(
+                        view: WebView,
+                        errorCode: Int,
+                        description: String,
+                        failingUrl: String
+                    ) {
+                        Log.e(TAG, "Erro ao carregar HTML offscreen (USB): $description ($errorCode)")
+                        cleanup()
+                    }
                 }
+
+                val wrappedHtml = """
+                    <!DOCTYPE html>
+                    <html>
+                    <head>
+                    <meta charset="utf-8">
+                    <meta name="viewport" content="width=${targetWidth}">
+                    <style>
+                        * { margin: 0; padding: 0; box-sizing: border-box; }
+                        html, body {
+                            width: ${targetWidth}px !important;
+                            max-width: ${targetWidth}px !important;
+                            overflow-x: hidden;
+                        }
+                    </style>
+                    </head>
+                    <body>$html</body>
+                    </html>
+                """.trimIndent()
+
+                offscreenWebView.loadDataWithBaseURL(null, wrappedHtml, "text/html", "utf-8", null)
             } catch (e: Exception) {
                 Log.e(TAG, "Erro ao instanciar WebView offscreen: ${e.message}", e)
             }

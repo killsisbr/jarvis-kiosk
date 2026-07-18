@@ -1,5 +1,6 @@
 package com.jarvis.kiosk
 
+import android.app.Activity
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Canvas
@@ -7,8 +8,10 @@ import android.os.Handler
 import android.os.Looper
 import android.util.Log
 import android.view.View
+import android.view.ViewGroup
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import java.util.ArrayDeque
 
 import com.sunmi.peripheral.printer.InnerPrinterCallback
 import com.sunmi.peripheral.printer.InnerPrinterException
@@ -90,6 +93,16 @@ object SunmiPrintHelper {
         }
     }
 
+    // Fila de impressao serial -- evita instanciar varios WebViews offscreen
+    // simultaneamente (o D2 Mini tem RAM limitada; renderers concorrentes
+    // derrubam o processo de renderizacao compartilhado com a WebView principal).
+    private data class PrintJob(val context: Context, val html: String, val paperWidth: Int)
+
+    private val jobQueue = ArrayDeque<PrintJob>()
+
+    @Volatile
+    private var printing = false
+
     /**
      * Renderiza HTML completo em um WebView offscreen, gera Bitmap e imprime.
      * Processo inteiramente silencioso -- sem popup, sem dialogo.
@@ -100,85 +113,140 @@ object SunmiPrintHelper {
      */
     fun printHtml(context: Context, html: String, paperWidth: Int = 576) {
         Handler(Looper.getMainLooper()).post {
-            try {
-                // Cria o WebView usando o context da Activity e desativa aceleracao de hardware
-                // para evitar conflitos na GPU compartilhada que deixam a tela principal branca.
-                val offscreenWebView = WebView(context)
-                offscreenWebView.setLayerType(View.LAYER_TYPE_SOFTWARE, null)
-                val targetWidth = if (paperWidth > 0) paperWidth else 576
+            jobQueue.add(PrintJob(context, html, paperWidth))
+            processNextJob()
+        }
+    }
 
-                offscreenWebView.settings.apply {
-                    javaScriptEnabled = true
-                    allowFileAccess = true
-                    useWideViewPort = false
-                    loadWithOverviewMode = false
-                }
-                offscreenWebView.setInitialScale(100)
+    private fun processNextJob() {
+        if (printing) return
+        val job = jobQueue.poll() ?: return
+        printing = true
+        renderAndPrint(job.context, job.html, job.paperWidth) {
+            printing = false
+            processNextJob()
+        }
+    }
 
-                // Injeta CSS para forcar largura da bobina termica
-                val wrappedHtml = """
-                    <!DOCTYPE html>
-                    <html>
-                    <head>
-                    <meta charset="utf-8">
-                    <meta name="viewport" content="width=${targetWidth}">
-                    <style>
-                        * { margin: 0; padding: 0; box-sizing: border-box; }
-                        html, body { 
-                            width: ${targetWidth}px !important; 
-                            max-width: ${targetWidth}px !important;
-                            overflow-x: hidden;
-                        }
-                        @media print { 
-                            body { width: ${targetWidth}px !important; } 
-                        }
-                    </style>
-                    </head>
-                    <body>$html</body>
-                    </html>
-                """.trimIndent()
+    private fun renderAndPrint(context: Context, html: String, paperWidth: Int, onDone: () -> Unit) {
+        // Precisa da Activity para anexar a WebView offscreen a decorView --
+        // sem isso, onAttachedToWindow() nunca dispara e o measure/layout/draw
+        // roda em estado indefinido no WebKit antigo do Android 7.1.2 (API 25),
+        // derrubando o processo de renderizacao compartilhado (tela branca no kiosk).
+        val activity = context as? Activity
+        val decorView = activity?.window?.decorView as? ViewGroup
+        if (decorView == null) {
+            Log.e(TAG, "printHtml: context nao e uma Activity, nao foi possivel anexar WebView offscreen")
+            onDone()
+            return
+        }
 
-                offscreenWebView.loadDataWithBaseURL(null, wrappedHtml, "text/html", "utf-8", null)
+        try {
+            val offscreenWebView = WebView(context)
+            offscreenWebView.setLayerType(View.LAYER_TYPE_SOFTWARE, null)
+            val targetWidth = if (paperWidth > 0) paperWidth else 576
 
-                offscreenWebView.webViewClient = object : WebViewClient() {
-                    override fun onPageFinished(view: WebView, url: String) {
-                        super.onPageFinished(view, url)
-
-                        // Delay para renderizar CSS/fontes/layouts
-                        Handler(Looper.getMainLooper()).postDelayed({
-                            try {
-                                view.measure(
-                                    View.MeasureSpec.makeMeasureSpec(targetWidth, View.MeasureSpec.EXACTLY),
-                                    View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED)
-                                )
-
-                                var height = view.measuredHeight
-                                if (height <= 0) height = 800
-
-                                view.layout(0, 0, targetWidth, height)
-
-                                val bitmap = Bitmap.createBitmap(targetWidth, height, Bitmap.Config.ARGB_8888)
-                                val canvas = Canvas(bitmap)
-                                view.draw(canvas)
-
-                                printBitmap(bitmap)
-
-                                Log.i(TAG, "HTML renderizado e impresso (${targetWidth}x${height})")
-                            } catch (e: Exception) {
-                                Log.e(TAG, "Erro ao converter WebView para Bitmap: ${e.message}", e)
-                            } finally {
-                                try {
-                                    view.destroy()
-                                } catch (ex: Exception) {
-                                    Log.e(TAG, "Erro ao destruir WebView offscreen: ${ex.message}")
-                                }
-                            }
-                        }, 500)
-                    }
-                }
-            } catch (e: Exception) {
-                Log.e(TAG, "Erro ao instanciar WebView offscreen: ${e.message}", e)
+            offscreenWebView.settings.apply {
+                javaScriptEnabled = true
+                allowFileAccess = true
+                useWideViewPort = false
+                loadWithOverviewMode = false
             }
+            offscreenWebView.setInitialScale(100)
+
+            fun cleanup() {
+                try {
+                    decorView.removeView(offscreenWebView)
+                } catch (ex: Exception) {
+                    Log.e(TAG, "Erro ao remover WebView offscreen da decorView: ${ex.message}")
+                }
+                try {
+                    offscreenWebView.destroy()
+                } catch (ex: Exception) {
+                    Log.e(TAG, "Erro ao destruir WebView offscreen: ${ex.message}")
+                }
+                onDone()
+            }
+
+            // Anexa a WebView (invisivel, 1x1) a decorView ANTES de carregar o
+            // conteudo, para que a Activity/Window real esteja disponivel quando
+            // o WebKit inicializar o compositor.
+            decorView.addView(offscreenWebView, ViewGroup.LayoutParams(1, 1))
+            offscreenWebView.visibility = View.INVISIBLE
+
+            // Registra o client ANTES de chamar loadDataWithBaseURL: caso contrario
+            // o carregamento pode terminar antes do listener existir e onPageFinished
+            // nunca dispara -- e a impressao nunca acontece.
+            offscreenWebView.webViewClient = object : WebViewClient() {
+                override fun onPageFinished(view: WebView, url: String) {
+                    super.onPageFinished(view, url)
+
+                    // Delay para renderizar CSS/fontes/layouts
+                    Handler(Looper.getMainLooper()).postDelayed({
+                        try {
+                            view.measure(
+                                View.MeasureSpec.makeMeasureSpec(targetWidth, View.MeasureSpec.EXACTLY),
+                                View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED)
+                            )
+
+                            var height = view.measuredHeight
+                            if (height <= 0) height = 800
+
+                            view.layout(0, 0, targetWidth, height)
+
+                            val bitmap = Bitmap.createBitmap(targetWidth, height, Bitmap.Config.ARGB_8888)
+                            val canvas = Canvas(bitmap)
+                            view.draw(canvas)
+
+                            printBitmap(bitmap)
+
+                            Log.i(TAG, "HTML renderizado e impresso (${targetWidth}x${height})")
+                        } catch (e: Exception) {
+                            Log.e(TAG, "Erro ao converter WebView para Bitmap: ${e.message}", e)
+                        } finally {
+                            cleanup()
+                        }
+                    }, 500)
+                }
+
+                override fun onReceivedError(
+                    view: WebView,
+                    errorCode: Int,
+                    description: String,
+                    failingUrl: String
+                ) {
+                    Log.e(TAG, "Erro ao carregar HTML offscreen: $description ($errorCode)")
+                    cleanup()
+                }
+            }
+
+            // Injeta CSS para forcar largura da bobina termica
+            val wrappedHtml = """
+                <!DOCTYPE html>
+                <html>
+                <head>
+                <meta charset="utf-8">
+                <meta name="viewport" content="width=${targetWidth}">
+                <style>
+                    * { margin: 0; padding: 0; box-sizing: border-box; }
+                    html, body {
+                        width: ${targetWidth}px !important;
+                        max-width: ${targetWidth}px !important;
+                        overflow-x: hidden;
+                    }
+                    @media print {
+                        body { width: ${targetWidth}px !important; }
+                    }
+                </style>
+                </head>
+                <body>$html</body>
+                </html>
+            """.trimIndent()
+
+            offscreenWebView.loadDataWithBaseURL(null, wrappedHtml, "text/html", "utf-8", null)
+        } catch (e: Exception) {
+            Log.e(TAG, "Erro ao instanciar WebView offscreen: ${e.message}", e)
+            onDone()
         }
     }
 

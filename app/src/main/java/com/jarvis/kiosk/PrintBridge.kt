@@ -59,46 +59,78 @@ class PrintBridge(private val context: Context) {
                 // Aplica na janela principal
                 applyOverride(window);
 
+                // Cria um Proxy resiliente recursivo para evitar TypeErrors
+                function createResilientProxy(name, targetObj) {
+                    return new Proxy(targetObj || {}, {
+                        get: function(target, prop) {
+                            if (prop === 'then' || prop === 'constructor') return undefined;
+                            if (prop in target) {
+                                return target[prop];
+                            }
+                            // Retorna stubs funcionais para metodos de manipulacao comuns de DOM
+                            if (prop === 'appendChild' || prop === 'removeChild' || prop === 'createElement' || prop === 'getElementById') {
+                                return function() { return createResilientProxy(name + '.' + String(prop)); };
+                            }
+                            return createResilientProxy(name + '.' + String(prop));
+                        },
+                        set: function(target, prop, value) {
+                            target[prop] = value;
+                            return true;
+                        }
+                    });
+                }
+
                 // Mock de window.open para capturar fluxo de criacao de cupons via popups dinâmicos
                 try {
                     window.open = function(url, target, features) {
                         console.log(tag, 'window.open interceptado para URL:', url);
                         
-                        // Se for navegacao para site externo ou URL real, navega na mesma aba
                         if (url && url !== 'about:blank' && !url.startsWith('javascript:')) {
                             window.location.href = url;
                             return window;
                         }
 
-                        // Objeto de emulacao da janela do cupom
+                        var docData = {
+                            _html: '',
+                            open: function() {
+                                this._html = '';
+                                return this;
+                            },
+                            write: function(content) {
+                                this._html += content;
+                            },
+                            writeln: function(content) {
+                                this._html += content + '\n';
+                            },
+                            close: function() {
+                                console.log(tag, 'document.close() chamado no mock');
+                            }
+                        };
+
+                        var mockDocument = new Proxy(docData, {
+                            get: function(target, prop) {
+                                if (prop in target) return target[prop];
+                                if (prop === 'body' || prop === 'head') {
+                                    return createResilientProxy('document.' + String(prop), {
+                                        write: function(c) { target.write(c); },
+                                        innerHTML: ''
+                                    });
+                                }
+                                return createResilientProxy('document.' + String(prop));
+                            },
+                            set: function(target, prop, value) {
+                                target[prop] = value;
+                                return true;
+                            }
+                        });
+
                         var mockWindow = {
                             closed: false,
-                            document: {
-                                _html: '',
-                                open: function() {
-                                    this._html = '';
-                                    return this;
-                                },
-                                write: function(content) {
-                                    this._html += content;
-                                },
-                                writeln: function(content) {
-                                    this._html += content + '\n';
-                                },
-                                close: function() {
-                                    console.log(tag, 'document.close() chamado no mock');
-                                },
-                                get body() {
-                                    var docSelf = this;
-                                    return {
-                                        write: function(c) { docSelf.write(c); }
-                                    };
-                                }
-                            },
+                            document: mockDocument,
                             print: function() {
                                 if (window.AndroidPrint) {
                                     try {
-                                        var finalHtml = this.document._html;
+                                        var finalHtml = docData._html;
                                         if (!finalHtml) {
                                             finalHtml = document.documentElement.outerHTML;
                                         }
@@ -110,16 +142,21 @@ class PrintBridge(private val context: Context) {
                             },
                             close: function() {
                                 this.closed = true;
-                                this.document._html = '';
+                                docData._html = '';
                                 console.log(tag, 'mockWindow.close() chamado');
                             },
                             focus: function() {},
                             blur: function() {}
                         };
 
-                        return mockWindow;
+                        return new Proxy(mockWindow, {
+                            get: function(target, prop) {
+                                if (prop in target) return target[prop];
+                                return createResilientProxy('window.' + String(prop));
+                            }
+                        });
                     };
-                    console.log(tag, 'Mock de window.open registrado');
+                    console.log(tag, 'Mock de window.open resiliente via Proxy registrado');
                 } catch(e) {
                     console.error(tag, 'Erro ao interceptar window.open:', e);
                 }
