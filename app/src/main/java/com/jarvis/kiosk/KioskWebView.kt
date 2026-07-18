@@ -33,7 +33,8 @@ object KioskWebView {
             builtInZoomControls = false
             displayZoomControls = false
             cacheMode = android.webkit.WebSettings.LOAD_DEFAULT
-            setSupportMultipleWindows(false)
+            setSupportMultipleWindows(true)
+            javaScriptCanOpenWindowsAutomatically = true
             userAgentString = userAgentString.replace("; wv", "")
         }
 
@@ -73,6 +74,47 @@ object KioskWebView {
         }
 
         webView.webChromeClient = object : WebChromeClient() {
+            override fun onCreateWindow(
+                view: WebView,
+                isDialog: Boolean,
+                isUserGesture: Boolean,
+                resultMsg: android.os.Message
+            ): Boolean {
+                // Cria um WebView temporario offscreen para gerenciar o popup de impressao sem alterar a tela do Kiosk
+                val tempWebView = WebView(view.context)
+                tempWebView.settings.apply {
+                    javaScriptEnabled = true
+                    domStorageEnabled = true
+                }
+                // Desativa aceleracao por hardware para rodar em CPU e evitar travamentos na GPU do app
+                tempWebView.setLayerType(View.LAYER_TYPE_SOFTWARE, null)
+
+                if (printBridge != null) {
+                    tempWebView.addJavascriptInterface(printBridge, PrintBridge.JS_INTERFACE_NAME)
+                }
+
+                tempWebView.webViewClient = object : WebViewClient() {
+                    override fun onPageFinished(v: WebView, url: String) {
+                        if (printBridge != null) {
+                            v.evaluateJavascript(PrintBridge.INJECT_SCRIPT, null)
+                        }
+                    }
+                }
+
+                val transport = resultMsg.obj as WebView.WebViewTransport
+                transport.webView = tempWebView
+                resultMsg.sendToTarget()
+                return true
+            }
+
+            override fun onCloseWindow(window: WebView) {
+                try {
+                    window.destroy()
+                } catch (e: Exception) {
+                    android.util.Log.e("KioskWebView", "Erro ao fechar tempWebView: ${e.message}")
+                }
+            }
+
             override fun onJsAlert(view: WebView, url: String, message: String, result: JsResult): Boolean {
                 result.confirm()
                 return true
