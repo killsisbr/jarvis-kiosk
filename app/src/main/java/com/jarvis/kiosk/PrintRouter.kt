@@ -141,9 +141,7 @@ object PrintRouter {
     ) {
         Handler(Looper.getMainLooper()).post {
             try {
-                WebView.enableSlowWholeDocumentDraw()
-
-                val offscreenWebView = WebView(context)
+                val offscreenWebView = WebView(context.applicationContext)
                 val targetWidth = if (paperWidth > 0) paperWidth else 576
 
                 offscreenWebView.settings.apply {
@@ -199,6 +197,12 @@ object PrintRouter {
                                 Log.i(TAG, "HTML renderizado para USB (${targetWidth}x${height})")
                             } catch (e: Exception) {
                                 Log.e(TAG, "Erro ao renderizar HTML para bitmap: ${e.message}", e)
+                            } finally {
+                                try {
+                                    view.destroy()
+                                } catch (ex: Exception) {
+                                    Log.e(TAG, "Erro ao destruir WebView offscreen: ${ex.message}")
+                                }
                             }
                         }, 500)
                     }

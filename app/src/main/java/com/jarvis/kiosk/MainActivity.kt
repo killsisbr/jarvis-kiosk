@@ -32,6 +32,10 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
+        // Habilita desenho offscreen de documento completo de forma estatica antes de instanciar qualquer WebView.
+        // Chamar isso apos criar WebViews causa tela branca e comportamento indefinido no WebKit.
+        WebView.enableSlowWholeDocumentDraw()
+
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         hideSystemUI()
 

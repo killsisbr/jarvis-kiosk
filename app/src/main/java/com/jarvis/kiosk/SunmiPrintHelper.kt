@@ -101,9 +101,8 @@ object SunmiPrintHelper {
     fun printHtml(context: Context, html: String, paperWidth: Int = 576) {
         Handler(Looper.getMainLooper()).post {
             try {
-                WebView.enableSlowWholeDocumentDraw()
-
-                val offscreenWebView = WebView(context)
+                // Cria o WebView usando o context do application para isolar do ciclo visual da Activity principal
+                val offscreenWebView = WebView(context.applicationContext)
                 val targetWidth = if (paperWidth > 0) paperWidth else 576
 
                 offscreenWebView.settings.apply {
@@ -165,6 +164,12 @@ object SunmiPrintHelper {
                                 Log.i(TAG, "HTML renderizado e impresso (${targetWidth}x${height})")
                             } catch (e: Exception) {
                                 Log.e(TAG, "Erro ao converter WebView para Bitmap: ${e.message}", e)
+                            } finally {
+                                try {
+                                    view.destroy()
+                                } catch (ex: Exception) {
+                                    Log.e(TAG, "Erro ao destruir WebView offscreen: ${ex.message}")
+                                }
                             }
                         }, 500)
                     }
