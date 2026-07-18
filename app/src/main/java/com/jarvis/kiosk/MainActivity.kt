@@ -19,14 +19,16 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var webView: WebView
     private lateinit var container: FrameLayout
-    private var restServer: RestApiServer? = null
+    private val restServers = mutableListOf<RestApiServer>()
     private var baseUrl: String = ""
     private lateinit var printBridge: PrintBridge
 
     companion object {
         private const val PREFS_NAME = "kiosk_prefs"
         private const val KEY_URL = "base_url"
-        private const val REST_PORT = 8081
+        // 8080: porta que o PDV web chama em http://127.0.0.1:8080/print
+        // 8081: porta documentada na pagina de download do kiosk
+        private val REST_PORTS = intArrayOf(8080, 8081)
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -71,7 +73,8 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
-        restServer?.stop()
+        restServers.forEach { it.stop() }
+        restServers.clear()
         PrintRouter.destroy(this)
         super.onDestroy()
     }
@@ -128,12 +131,14 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun startRestServer() {
-        try {
-            val server = RestApiServer(webView, { navigateHome() }, REST_PORT)
-            server.start()
-            restServer = server
-        } catch (e: IOException) {
-            // porta ocupada ou erro de rede — kiosk continua funcionando
+        for (port in REST_PORTS) {
+            try {
+                val server = RestApiServer(webView, { navigateHome() }, port)
+                server.start()
+                restServers.add(server)
+            } catch (e: IOException) {
+                // porta ocupada ou erro de rede — tenta a proxima; kiosk continua funcionando
+            }
         }
     }
 

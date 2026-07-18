@@ -16,6 +16,22 @@ class PrintBridge(private val context: Context) {
 
     private val htmlBuffer = StringBuilder()
 
+    // Debounce anti-duplicata: o mesmo cupom pode chegar por mais de um caminho
+    // (auto-print no iframe + print() explicito + fallback popup) em sequencia.
+    private var lastPrintHash = 0
+    private var lastPrintAt = 0L
+
+    private fun isDuplicate(html: String): Boolean {
+        val hash = html.hashCode()
+        val now = System.currentTimeMillis()
+        synchronized(this) {
+            if (hash == lastPrintHash && now - lastPrintAt < 3000) return true
+            lastPrintHash = hash
+            lastPrintAt = now
+            return false
+        }
+    }
+
     companion object {
         private const val TAG = "PrintBridge"
 
@@ -184,24 +200,47 @@ class PrintBridge(private val context: Context) {
                     console.error(tag, 'Erro ao interceptar window.open:', e);
                 }
 
-                // Intercepta criacao de novos iframes
+                // Intercepta iframes NO MOMENTO da insercao no DOM (microtask do
+                // MutationObserver roda antes do evento load). Esperar o load do
+                // elemento e tarde demais: cupons com <script>window.onload=print()</script>
+                // disparam o window.print() nativo antes -- e um print de script nao
+                // atendido trava o renderer do WebView antigo em modo impressao
+                // (tela branca permanente no Android 7).
+                function hookIframe(el) {
+                    try {
+                        if (el.contentWindow) applyOverride(el.contentWindow);
+                    } catch(err) {}
+                    try {
+                        el.addEventListener('load', function() {
+                            try {
+                                if (el.contentWindow) applyOverride(el.contentWindow);
+                            } catch(err) {}
+                        });
+                    } catch(err) {}
+                }
+
                 try {
-                    var orgCreate = document.createElement;
-                    document.createElement = function(tagName) {
-                        var el = orgCreate.apply(this, arguments);
-                        if (el && tagName && tagName.toLowerCase() === 'iframe') {
-                            el.addEventListener('load', function() {
-                                try {
-                                    if (el.contentWindow) {
-                                        applyOverride(el.contentWindow);
-                                    }
-                                } catch(err) {}
-                            });
+                    var mo = new MutationObserver(function(muts) {
+                        for (var i = 0; i < muts.length; i++) {
+                            var nodes = muts[i].addedNodes;
+                            for (var j = 0; j < nodes.length; j++) {
+                                var n = nodes[j];
+                                if (!n.tagName) continue;
+                                if (n.tagName === 'IFRAME') {
+                                    hookIframe(n);
+                                } else if (n.querySelectorAll) {
+                                    var frames = n.querySelectorAll('iframe');
+                                    for (var k = 0; k < frames.length; k++) hookIframe(frames[k]);
+                                }
+                            }
                         }
-                        return el;
-                    };
+                    });
+                    mo.observe(document.documentElement, { childList: true, subtree: true });
+
+                    var existing = document.querySelectorAll('iframe');
+                    for (var i = 0; i < existing.length; i++) hookIframe(existing[i]);
                 } catch(e) {
-                    console.error(tag, 'Erro ao interceptar createElement:', e);
+                    console.error(tag, 'Erro ao observar iframes:', e);
                 }
             })();
         """.trimIndent()
@@ -244,6 +283,10 @@ class PrintBridge(private val context: Context) {
             Log.w(TAG, "Nenhuma impressora pronta no endPrintJob (${PrintRouter.getStatusDetail()})")
             return
         }
+        if (isDuplicate(fullHtml)) {
+            Log.i(TAG, "endPrintJob: impressao duplicada ignorada (mesmo HTML em <3s)")
+            return
+        }
         PrintRouter.printHtml(context, fullHtml, if (width > 0) width else 576)
     }
 
@@ -257,6 +300,10 @@ class PrintBridge(private val context: Context) {
             Log.w(TAG, "Impressora nao pronta. Status: ${PrintRouter.getStatusDetail()}")
             return
         }
+        if (isDuplicate(html)) {
+            Log.i(TAG, "printPage: impressao duplicada ignorada (mesmo HTML em <3s)")
+            return
+        }
         PrintRouter.printHtml(context, html, 576)
     }
 
@@ -268,6 +315,10 @@ class PrintBridge(private val context: Context) {
         Log.i(TAG, "printHtml() legado chamado. HTML size: ${html.length}, width: ${width}")
         if (!PrintRouter.isReady()) {
             Log.w(TAG, "Impressora nao pronta. Status: ${PrintRouter.getStatusDetail()}")
+            return
+        }
+        if (isDuplicate(html)) {
+            Log.i(TAG, "printHtml: impressao duplicada ignorada (mesmo HTML em <3s)")
             return
         }
         PrintRouter.printHtml(context, html, if (width > 0) width else 576)

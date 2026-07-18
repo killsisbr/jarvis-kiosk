@@ -226,7 +226,13 @@ object PrintRouter {
                     }
                 }
 
-                val wrappedHtml = """
+                // Cupons do PDV ja chegam como documento completo (<!DOCTYPE html>...);
+                // re-envelopar aninharia <html> dentro de <body>. So envelopa fragmentos.
+                val trimmed = html.trimStart()
+                val isFullDocument = trimmed.startsWith("<!DOCTYPE", ignoreCase = true) ||
+                    trimmed.startsWith("<html", ignoreCase = true)
+
+                val wrappedHtml = if (isFullDocument) html else """
                     <!DOCTYPE html>
                     <html>
                     <head>
