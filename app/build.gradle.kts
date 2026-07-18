@@ -11,8 +11,8 @@ android {
         applicationId = "com.jarvis.kiosk"
         minSdk = 21
         targetSdk = 34
-        versionCode = 1
-        versionName = "1.0.0"
+        versionCode = (project.findProperty("VERSION_CODE") as? String)?.toInt() ?: 1
+        versionName = (project.findProperty("VERSION_NAME") as? String) ?: "1.0.0"
     }
 
     buildTypes {

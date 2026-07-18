@@ -8,6 +8,9 @@
     <!-- USB Host para impressoras externas (Epson, genericas ESC/POS) -->
     <uses-feature android:name="android.hardware.usb.host" android:required="false" />
 
+    <!-- Permissao para requisitar a instalacao de APKs atualizados -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+
     <application
         android:allowBackup="false"
         android:icon="@mipmap/ic_launcher"
@@ -28,5 +31,16 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- FileProvider para compartilhar o APK de atualizacao baixado com o instalador do SO -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="com.jarvis.kiosk.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
     </application>
 </manifest>

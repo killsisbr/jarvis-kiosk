@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths>
+    <!-- Mapeia a pasta context.cacheDir do aplicativo para permitir compartilhamento de arquivos temporarios -->
+    <cache-path name="shared_apk" path="/" />
+</paths>

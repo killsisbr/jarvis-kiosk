@@ -51,12 +51,12 @@ jobs:
             ${{ runner.os }}-gradle-
 
       - name: Build Debug APK
-        run: ./gradlew assembleDebug --no-daemon --stacktrace
+        run: ./gradlew assembleDebug -PVERSION_CODE=${{ github.run_number }} -PVERSION_NAME=1.0.${{ github.run_number }} --no-daemon --stacktrace
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: JARVIS-Kiosk-v1.0.0-debug
+          name: JARVIS-Kiosk-v1.0.${{ github.run_number }}-debug
           path: app/build/outputs/apk/debug/app-debug.apk
           retention-days: 30
 
@@ -69,7 +69,9 @@ jobs:
           fi
 
       - name: Preparar APK para Release
-        run: cp app/build/outputs/apk/debug/app-debug.apk jarvis-kiosk.apk
+        run: |
+          cp app/build/outputs/apk/debug/app-debug.apk jarvis-kiosk.apk
+          echo '{"versionCode": ${{ github.run_number }}, "versionName": "1.0.${{ github.run_number }}", "downloadUrl": "https://github.com/killsisbr/jarvis-kiosk/releases/latest/download/jarvis-kiosk.apk"}' > version.json
 
       - name: Publicar Release (link estavel)
         if: github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main'
@@ -81,5 +83,7 @@ jobs:
             APK do JARVIS Kiosk Browser (build automatica).
             Baixe sempre a ultima versao em:
             https://github.com/killsisbr/jarvis-kiosk/releases/latest/download/jarvis-kiosk.apk
-          files: jarvis-kiosk.apk
+          files: |
+            jarvis-kiosk.apk
+            version.json
           make_latest: true

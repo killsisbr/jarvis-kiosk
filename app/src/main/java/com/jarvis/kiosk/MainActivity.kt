@@ -42,6 +42,9 @@ class MainActivity : AppCompatActivity() {
         // Inicializa impressoras: Sunmi interna + USB externa (Epson)
         PrintRouter.init(this)
 
+        // Verifica se ha atualizacoes OTA disponiveis no GitHub Releases
+        AutoUpdateManager.check(this)
+
         // Bridge JS para interceptar window.print()
         printBridge = PrintBridge(this)
 
