@@ -146,6 +146,9 @@ object SunmiPrintHelper {
             offscreenWebView.setLayerType(View.LAYER_TYPE_SOFTWARE, null)
             val targetWidth = if (paperWidth > 0) paperWidth else 576
 
+            val density = context.resources.displayMetrics.density
+            val physicalWidth = (targetWidth * density).toInt()
+
             offscreenWebView.settings.apply {
                 javaScriptEnabled = true
                 allowFileAccess = true
@@ -185,22 +188,26 @@ object SunmiPrintHelper {
                     Handler(Looper.getMainLooper()).postDelayed({
                         try {
                             view.measure(
-                                View.MeasureSpec.makeMeasureSpec(targetWidth, View.MeasureSpec.EXACTLY),
+                                View.MeasureSpec.makeMeasureSpec(physicalWidth, View.MeasureSpec.EXACTLY),
                                 View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED)
                             )
 
-                            var height = view.measuredHeight
-                            if (height <= 0) height = 800
+                            var physicalHeight = view.measuredHeight
+                            if (physicalHeight <= 0) physicalHeight = (800 * density).toInt()
 
-                            view.layout(0, 0, targetWidth, height)
+                            view.layout(0, 0, physicalWidth, physicalHeight)
 
-                            val bitmap = Bitmap.createBitmap(targetWidth, height, Bitmap.Config.ARGB_8888)
-                            val canvas = Canvas(bitmap)
+                            val originalBitmap = Bitmap.createBitmap(physicalWidth, physicalHeight, Bitmap.Config.ARGB_8888)
+                            val canvas = Canvas(originalBitmap)
                             view.draw(canvas)
 
-                            printBitmap(bitmap)
+                            // Redimensiona o bitmap de alta resolucao para a largura util da impressora
+                            val targetHeight = (physicalHeight / density).toInt()
+                            val scaledBitmap = Bitmap.createScaledBitmap(originalBitmap, targetWidth, targetHeight, true)
 
-                            Log.i(TAG, "HTML renderizado e impresso (${targetWidth}x${height})")
+                            printBitmap(scaledBitmap)
+
+                            Log.i(TAG, "HTML renderizado via supersampling e impresso (${targetWidth}x${targetHeight})")
                         } catch (e: Exception) {
                             Log.e(TAG, "Erro ao converter WebView para Bitmap: ${e.message}", e)
                         } finally {
