@@ -20,7 +20,7 @@ object KioskWebView {
      * @param webView WebView principal do kiosk
      * @param printBridge Interface JS para impressao silenciosa (pode ser null se impressao desabilitada)
      */
-    fun setup(webView: WebView, printBridge: PrintBridge? = null) {
+    fun setup(webView: WebView, printBridge: PrintBridge? = null, onPageFinishedCallback: ((url: String) -> Unit)? = null) {
         val settings = webView.settings.apply {
             javaScriptEnabled = true
             domStorageEnabled = true
@@ -62,6 +62,7 @@ object KioskWebView {
                 if (printBridge != null) {
                     view.evaluateJavascript(PrintBridge.INJECT_SCRIPT, null)
                 }
+                onPageFinishedCallback?.invoke(url)
             }
             override fun onRenderProcessGone(view: WebView, detail: android.webkit.RenderProcessGoneDetail): Boolean {
                 android.util.Log.w("KioskWebView", "Processo de renderizacao Chromium caiu (didCrash=${detail.didCrash()}). Recarregando...")

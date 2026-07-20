@@ -18,10 +18,12 @@ import java.io.IOException
 class MainActivity : AppCompatActivity() {
 
     private lateinit var webView: WebView
+    private var backgroundWebView: WebView? = null
     private lateinit var container: FrameLayout
     private val restServers = mutableListOf<RestApiServer>()
     private var baseUrl: String = ""
     private lateinit var printBridge: PrintBridge
+    private var isQuadroLoaded = false
 
     companion object {
         private const val PREFS_NAME = "kiosk_prefs"
@@ -76,6 +78,11 @@ class MainActivity : AppCompatActivity() {
         restServers.forEach { it.stop() }
         restServers.clear()
         PrintRouter.destroy(this)
+        backgroundWebView?.let {
+            it.stopLoading()
+            it.destroy()
+        }
+        backgroundWebView = null
         super.onDestroy()
     }
 
@@ -116,18 +123,62 @@ class MainActivity : AppCompatActivity() {
     private fun initKiosk(url: String) {
         baseUrl = url
         webView = WebView(this)
+        backgroundWebView = WebView(this)
+        isQuadroLoaded = false
+
         container = FrameLayout(this)
+        
+        // Adiciona a backgroundWebView em segundo plano (com tamanho 1x1) para nao suspender o JS
+        container.addView(backgroundWebView, FrameLayout.LayoutParams(1, 1))
+        
         container.addView(webView, FrameLayout.LayoutParams(
             FrameLayout.LayoutParams.MATCH_PARENT,
             FrameLayout.LayoutParams.MATCH_PARENT
         ))
         setContentView(container)
 
-        // Setup com PrintBridge integrado -- intercepta window.print() silenciosamente
-        KioskWebView.setup(webView, printBridge)
+        // Setup da WebView oculta (com a mesma bridge de impressao)
+        backgroundWebView?.let { KioskWebView.setup(it, printBridge) }
+
+        // Setup da WebView principal com callback para recarregar o quadro em background apos o login
+        KioskWebView.setup(webView, printBridge) { pageUrl ->
+            checkAndLoadBackgroundQuadro(pageUrl)
+        }
         webView.loadUrl(url)
 
         startRestServer()
+    }
+
+    private fun checkAndLoadBackgroundQuadro(currentUrl: String) {
+        if (currentUrl.contains("/admin") && !currentUrl.contains("/login") && !isQuadroLoaded) {
+            val cleanUrl = currentUrl.split("?").first()
+            val quadroUrl = when {
+                cleanUrl.endsWith("/admin") -> "$cleanUrl/quadro.html"
+                cleanUrl.endsWith("/admin/") -> "${cleanUrl}quadro.html"
+                cleanUrl.contains("/index.html") -> cleanUrl.replace("/index.html", "/quadro.html")
+                cleanUrl.contains("/caixa.html") -> cleanUrl.replace("/caixa.html", "/quadro.html")
+                cleanUrl.endsWith("/public/admin") -> "$cleanUrl/quadro.html"
+                cleanUrl.endsWith("/public/admin/") -> "${cleanUrl}quadro.html"
+                else -> {
+                    val idx = cleanUrl.indexOf("/admin")
+                    if (idx != -1) {
+                        cleanUrl.substring(0, idx + 6) + "/quadro.html"
+                    } else {
+                        null
+                    }
+                }
+            }
+
+            if (quadroUrl != null) {
+                android.util.Log.i("MainActivity", "Iniciando WebView de background para Quadro: $quadroUrl")
+                backgroundWebView?.post {
+                    backgroundWebView?.loadUrl(quadroUrl)
+                    isQuadroLoaded = true
+                }
+            }
+        } else if (currentUrl.contains("/login")) {
+            isQuadroLoaded = false
+        }
     }
 
     private fun startRestServer() {
