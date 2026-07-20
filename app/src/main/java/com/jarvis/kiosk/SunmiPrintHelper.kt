@@ -113,7 +113,23 @@ object SunmiPrintHelper {
      */
     fun printHtml(context: Context, html: String, paperWidth: Int = 576) {
         Handler(Looper.getMainLooper()).post {
-            jobQueue.add(PrintJob(context, html, paperWidth))
+            // Deteccao dinamica da largura util da impressora fisica da Sunmi (1 = 80mm, 2 = 58mm)
+            val resolvedPaperWidth = if (isReady()) {
+                val paperType = try {
+                    printerService?.getPrinterPaper()
+                } catch (e: Exception) {
+                    null
+                }
+                when (paperType) {
+                    1 -> 576  // 80mm
+                    2 -> 384  // 58mm
+                    else -> if (paperWidth > 0) paperWidth else 384
+                }
+            } else {
+                paperWidth
+            }
+            Log.i(TAG, "printHtml: paperWidth recebido=$paperWidth, resolvido=$resolvedPaperWidth")
+            jobQueue.add(PrintJob(context, html, resolvedPaperWidth))
             processNextJob()
         }
     }
