@@ -121,8 +121,8 @@ object SunmiPrintHelper {
                     null
                 }
                 when (paperType) {
-                    1 -> 576  // 80mm
-                    2 -> 384  // 58mm
+                    0 -> 576  // 0 = 80mm no SDK Sunmi
+                    1 -> 384  // 1 = 58mm no SDK Sunmi
                     else -> if (paperWidth > 0) paperWidth else 384
                 }
             } else {
