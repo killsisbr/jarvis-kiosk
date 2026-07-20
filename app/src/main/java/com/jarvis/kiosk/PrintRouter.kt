@@ -182,7 +182,11 @@ object PrintRouter {
                     }
                 }
 
-                decorView.addView(offscreenWebView, ViewGroup.LayoutParams(1, 1))
+                // Anexa a WebView com a largura fisica real (invisivel) a decorView ANTES de carregar o
+                // conteudo, para que o motor do Chromium do Android calcule o flexbox e fontes
+                // com as dimensoes reais corretas, sem truncamentos de layout de 1x1.
+                val layoutParams = ViewGroup.LayoutParams(physicalWidth, ViewGroup.LayoutParams.WRAP_CONTENT)
+                decorView.addView(offscreenWebView, layoutParams)
                 offscreenWebView.visibility = View.INVISIBLE
 
                 // Registra o client ANTES de chamar loadDataWithBaseURL: caso contrario
