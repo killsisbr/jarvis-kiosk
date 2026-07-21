@@ -223,7 +223,7 @@ object PrintRouter {
                             } finally {
                                 cleanup()
                             }
-                        }, 500)
+                        }, 1200)
                     }
 
                     override fun onReceivedError(
