@@ -7,6 +7,15 @@ android {
     namespace = "com.jarvis.kiosk"
     compileSdk = 34
 
+    signingConfigs {
+        create("release") {
+            storeFile = file("debug.keystore")
+            storePassword = "android"
+            keyAlias = "androiddebugkey"
+            keyPassword = "android"
+        }
+    }
+
     defaultConfig {
         applicationId = "com.jarvis.kiosk"
         minSdk = 21
@@ -16,7 +25,11 @@ android {
     }
 
     buildTypes {
-        release {
+        getByName("debug") {
+            signingConfig = signingConfigs.getByName("release")
+        }
+        getByName("release") {
+            signingConfig = signingConfigs.getByName("release")
             isMinifyEnabled = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
